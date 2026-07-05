@@ -1,0 +1,32 @@
+%YAML:1.0 # need to specify the file type at the top!
+
+# ============================================================================
+# open_vins dataset runner configuration
+#
+# A dataset is a single .mcap recording (ros1msg encoding) plus this yaml.
+# Sensor topics are NOT listed here: they come from the kalibr chain files
+# referenced by the estimator config (`rostopic` key of imu0/cam0..N), so the
+# calibration files stay the single source of truth for the sensor setup.
+#   convert a EuRoC/TUM-VI style folder: tools/euroc_folder_to_mcap.py
+#   convert an existing ROS1 bag:        `mcap convert in.bag out.mcap`
+# ============================================================================
+
+# mcap recording to play (absolute, or relative to this file)
+mcap_path: "../../data/tumvi_calib_cam1_1024.mcap"
+
+# estimator configuration to load (relative to this file)
+estimator_config: "estimator_config.yaml"
+
+# ground-truth PoseStamped topic inside the mcap ("" if none)
+gt_topic: "/gt/pose"
+
+# playback rate: 0 = process as fast as possible, 1.0 = realtime, 2.0 = 2x ...
+playback_rate: 0.0
+
+# output directory (relative to cwd): trajectory estimate, gt export, report
+output_dir: "results/tumvi_calib_cam1"
+
+# rerun visualization: 1 = enabled (needs ENABLE_RERUN build), 0 = headless
+use_rerun: 1
+# if non-empty, log to this .rrd file instead of spawning the live viewer
+rerun_save: ""

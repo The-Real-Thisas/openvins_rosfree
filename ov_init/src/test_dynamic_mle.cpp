@@ -32,13 +32,6 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/filesystem.hpp>
 
-#if ROS_AVAILABLE == 1
-#include <nav_msgs/Path.h>
-#include <ros/ros.h>
-#include <sensor_msgs/PointCloud.h>
-#include <sensor_msgs/PointCloud2.h>
-#include <sensor_msgs/point_cloud2_iterator.h>
-#endif
 
 #include "ceres/Factor_GenericPrior.h"
 #include "ceres/Factor_ImageReprojCalib.h"
@@ -67,28 +60,9 @@ int main(int argc, char **argv) {
     config_path = argv[1];
   }
 
-#if ROS_AVAILABLE == 1
-  // Launch our ros node
-  ros::init(argc, argv, "test_dynamic_mle");
-  auto nh = std::make_shared<ros::NodeHandle>("~");
-  nh->param<std::string>("config_path", config_path, config_path);
-
-  // Topics to publish
-  auto pub_pathimu = nh->advertise<nav_msgs::Path>("/ov_msckf/pathimu", 2);
-  PRINT_DEBUG("Publishing: %s\n", pub_pathimu.getTopic().c_str());
-  auto pub_pathgt = nh->advertise<nav_msgs::Path>("/ov_msckf/pathgt", 2);
-  PRINT_DEBUG("Publishing: %s\n", pub_pathgt.getTopic().c_str());
-  auto pub_loop_point = nh->advertise<sensor_msgs::PointCloud>("/ov_msckf/loop_feats", 2);
-  PRINT_DEBUG("Publishing: %s\n", pub_loop_point.getTopic().c_str());
-  auto pub_points_sim = nh->advertise<sensor_msgs::PointCloud2>("/ov_msckf/points_sim", 2);
-  PRINT_DEBUG("Publishing: %s\n", pub_points_sim.getTopic().c_str());
-#endif
 
   // Load the config
   auto parser = std::make_shared<ov_core::YamlParser>(config_path);
-#if ROS_AVAILABLE == 1
-  parser->set_node_handler(nh);
-#endif
 
   // Verbosity
   std::string verbosity = "INFO";
@@ -556,87 +530,6 @@ int main(int argc, char **argv) {
         //      }
       }
 
-#if ROS_AVAILABLE == 1
-      // Visualize in RVIZ our current estimates and
-      if (map_states.size() % 1 == 0) {
-
-        // Pose states
-        nav_msgs::Path arrEST, arrGT;
-        arrEST.header.stamp = ros::Time::now();
-        arrEST.header.frame_id = "global";
-        arrGT.header.stamp = ros::Time::now();
-        arrGT.header.frame_id = "global";
-        for (auto &statepair : map_states) {
-          geometry_msgs::PoseStamped poseEST, poseGT;
-          poseEST.header.stamp = ros::Time(statepair.first);
-          poseEST.header.frame_id = "global";
-          poseEST.pose.orientation.x = ceres_vars_ori[statepair.second][0];
-          poseEST.pose.orientation.y = ceres_vars_ori[statepair.second][1];
-          poseEST.pose.orientation.z = ceres_vars_ori[statepair.second][2];
-          poseEST.pose.orientation.w = ceres_vars_ori[statepair.second][3];
-          poseEST.pose.position.x = ceres_vars_pos[statepair.second][0];
-          poseEST.pose.position.y = ceres_vars_pos[statepair.second][1];
-          poseEST.pose.position.z = ceres_vars_pos[statepair.second][2];
-          Eigen::Matrix<double, 17, 1> gt_imustate;
-          bool success = sim.get_state(statepair.first + sim.get_true_parameters().calib_camimu_dt, gt_imustate);
-          assert(success);
-          poseGT.header.stamp = ros::Time(statepair.first);
-          poseGT.header.frame_id = "global";
-          poseGT.pose.orientation.x = gt_imustate(1);
-          poseGT.pose.orientation.y = gt_imustate(2);
-          poseGT.pose.orientation.z = gt_imustate(3);
-          poseGT.pose.orientation.w = gt_imustate(4);
-          poseGT.pose.position.x = gt_imustate(5);
-          poseGT.pose.position.y = gt_imustate(6);
-          poseGT.pose.position.z = gt_imustate(7);
-          arrEST.poses.push_back(poseEST);
-          arrGT.poses.push_back(poseGT);
-        }
-        pub_pathimu.publish(arrEST);
-        pub_pathgt.publish(arrGT);
-
-        // Features ESTIMATES pointcloud
-        sensor_msgs::PointCloud point_cloud;
-        point_cloud.header.frame_id = "global";
-        point_cloud.header.stamp = ros::Time::now();
-        for (auto &featpair : map_features) {
-          if (map_features_delayed.find(featpair.first) != map_features_delayed.end())
-            continue;
-          geometry_msgs::Point32 p;
-          p.x = (float)ceres_vars_feat[map_features[featpair.first]][0];
-          p.y = (float)ceres_vars_feat[map_features[featpair.first]][1];
-          p.z = (float)ceres_vars_feat[map_features[featpair.first]][2];
-          point_cloud.points.push_back(p);
-        }
-        pub_loop_point.publish(point_cloud);
-
-        // Features GROUNDTRUTH pointcloud
-        sensor_msgs::PointCloud2 cloud;
-        cloud.header.frame_id = "global";
-        cloud.header.stamp = ros::Time::now();
-        cloud.width = map_features.size();
-        cloud.height = 1;
-        cloud.is_bigendian = false;
-        cloud.is_dense = false; // there may be invalid points
-        sensor_msgs::PointCloud2Modifier modifier(cloud);
-        modifier.setPointCloud2FieldsByString(1, "xyz");
-        modifier.resize(map_features.size());
-        sensor_msgs::PointCloud2Iterator<float> out_x(cloud, "x");
-        sensor_msgs::PointCloud2Iterator<float> out_y(cloud, "y");
-        sensor_msgs::PointCloud2Iterator<float> out_z(cloud, "z");
-        for (auto &featpair : map_features) {
-          if (map_features_delayed.find(featpair.first) != map_features_delayed.end())
-            continue;
-          *out_x = (float)sim.get_map().at(featpair.first)(0); // no change in id since no tracker is used
-          ++out_x;
-          *out_y = (float)sim.get_map().at(featpair.first)(1); // no change in id since no tracker is used
-          ++out_y;
-          *out_z = (float)sim.get_map().at(featpair.first)(2); // no change in id since no tracker is used
-          ++out_z;
-        }
-        pub_points_sim.publish(cloud);
-      }
-#endif
     }
   }
 

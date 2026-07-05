@@ -30,13 +30,6 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/filesystem.hpp>
 
-#if ROS_AVAILABLE == 1
-#include <nav_msgs/Path.h>
-#include <ros/ros.h>
-#include <sensor_msgs/PointCloud.h>
-#include <sensor_msgs/PointCloud2.h>
-#include <sensor_msgs/point_cloud2_iterator.h>
-#endif
 
 #include "dynamic/DynamicInitializer.h"
 #include "init/InertialInitializerOptions.h"
@@ -81,28 +74,9 @@ int main(int argc, char **argv) {
     config_path = argv[1];
   }
 
-#if ROS_AVAILABLE == 1
-  // Launch our ros node
-  ros::init(argc, argv, "test_dynamic_init");
-  auto nh = std::make_shared<ros::NodeHandle>("~");
-  nh->param<std::string>("config_path", config_path, config_path);
-
-  // Topics to publish
-  auto pub_pathimu = nh->advertise<nav_msgs::Path>("/ov_msckf/pathimu", 2);
-  PRINT_DEBUG("Publishing: %s\n", pub_pathimu.getTopic().c_str());
-  auto pub_pathgt = nh->advertise<nav_msgs::Path>("/ov_msckf/pathgt", 2);
-  PRINT_DEBUG("Publishing: %s\n", pub_pathgt.getTopic().c_str());
-  auto pub_loop_point = nh->advertise<sensor_msgs::PointCloud>("/ov_msckf/loop_feats", 2);
-  PRINT_DEBUG("Publishing: %s\n", pub_loop_point.getTopic().c_str());
-  auto pub_points_sim = nh->advertise<sensor_msgs::PointCloud2>("/ov_msckf/points_sim", 2);
-  PRINT_DEBUG("Publishing: %s\n", pub_points_sim.getTopic().c_str());
-#endif
 
   // Load the config
   auto parser = std::make_shared<ov_core::YamlParser>(config_path);
-#if ROS_AVAILABLE == 1
-  parser->set_node_handler(nh);
-#endif
 
   // Verbosity
   std::string verbosity = "INFO";
@@ -232,108 +206,6 @@ int main(int argc, char **argv) {
         PRINT_INFO(REDPURPLE "nees total = %.3f | ori = %.3f | pos = %.3f (ideal is 15 and 3)\n" RESET, nees_total, nees_ori, nees_pos);
         PRINT_INFO(REDPURPLE "nees vel = %.3f | bg = %.3f | ba = %.3f (ideal 3)\n" RESET, nees_vel, nees_bg, nees_ba);
 
-#if ROS_AVAILABLE == 1
-        // Align the groundtruth to the current estimate yaw
-        // Only use the first frame so we can see the drift
-        double oldestpose_time = -1;
-        std::shared_ptr<ov_type::PoseJPL> oldestpose = nullptr;
-        for (auto const &_pose : _clones_IMU) {
-          if (oldestpose == nullptr || _pose.first < oldestpose_time) {
-            oldestpose_time = _pose.first;
-            oldestpose = _pose.second;
-          }
-        }
-        assert(oldestpose != nullptr);
-        Eigen::Vector4d q_es_0, q_gt_0;
-        Eigen::Vector3d p_es_0, p_gt_0;
-        q_es_0 = oldestpose->quat();
-        p_es_0 = oldestpose->pos();
-        Eigen::Matrix<double, 17, 1> gt_imustate_0;
-        bool success2 = sim.get_state(oldestpose_time + sim.get_true_parameters().calib_camimu_dt, gt_imustate_0);
-        assert(success2);
-        q_gt_0 = gt_imustate_0.block(1, 0, 4, 1);
-        p_gt_0 = gt_imustate_0.block(5, 0, 3, 1);
-        Eigen::Matrix3d R_ESTtoGT;
-        Eigen::Vector3d t_ESTinGT;
-        align_posyaw_single(q_es_0, p_es_0, q_gt_0, p_gt_0, R_ESTtoGT, t_ESTinGT);
-
-        // Pose states
-        nav_msgs::Path arrEST, arrGT;
-        arrEST.header.stamp = ros::Time::now();
-        arrEST.header.frame_id = "global";
-        arrGT.header.stamp = ros::Time::now();
-        arrGT.header.frame_id = "global";
-        for (auto const &_pose : _clones_IMU) {
-          geometry_msgs::PoseStamped poseEST, poseGT;
-          poseEST.header.stamp = ros::Time(_pose.first);
-          poseEST.header.frame_id = "global";
-          poseEST.pose.orientation.x = _pose.second->quat()(0, 0);
-          poseEST.pose.orientation.y = _pose.second->quat()(1, 0);
-          poseEST.pose.orientation.z = _pose.second->quat()(2, 0);
-          poseEST.pose.orientation.w = _pose.second->quat()(3, 0);
-          poseEST.pose.position.x = _pose.second->pos()(0, 0);
-          poseEST.pose.position.y = _pose.second->pos()(1, 0);
-          poseEST.pose.position.z = _pose.second->pos()(2, 0);
-          Eigen::Matrix<double, 17, 1> gt_imustate;
-          bool success3 = sim.get_state(_pose.first + sim.get_true_parameters().calib_camimu_dt, gt_imustate);
-          assert(success3);
-          gt_imustate.block(1, 0, 4, 1) = ov_core::quat_multiply(gt_imustate.block(1, 0, 4, 1), ov_core::rot_2_quat(R_ESTtoGT));
-          gt_imustate.block(5, 0, 3, 1) = R_ESTtoGT.transpose() * (gt_imustate.block(5, 0, 3, 1) - t_ESTinGT);
-          poseGT.header.stamp = ros::Time(_pose.first);
-          poseGT.header.frame_id = "global";
-          poseGT.pose.orientation.x = gt_imustate(1);
-          poseGT.pose.orientation.y = gt_imustate(2);
-          poseGT.pose.orientation.z = gt_imustate(3);
-          poseGT.pose.orientation.w = gt_imustate(4);
-          poseGT.pose.position.x = gt_imustate(5);
-          poseGT.pose.position.y = gt_imustate(6);
-          poseGT.pose.position.z = gt_imustate(7);
-          arrEST.poses.push_back(poseEST);
-          arrGT.poses.push_back(poseGT);
-        }
-        pub_pathimu.publish(arrEST);
-        pub_pathgt.publish(arrGT);
-
-        // Features ESTIMATES pointcloud
-        sensor_msgs::PointCloud point_cloud;
-        point_cloud.header.frame_id = "global";
-        point_cloud.header.stamp = ros::Time::now();
-        for (auto const &featpair : _features_SLAM) {
-          geometry_msgs::Point32 p;
-          p.x = (float)featpair.second->get_xyz(false)(0, 0);
-          p.y = (float)featpair.second->get_xyz(false)(1, 0);
-          p.z = (float)featpair.second->get_xyz(false)(2, 0);
-          point_cloud.points.push_back(p);
-        }
-        pub_loop_point.publish(point_cloud);
-
-        // Features GROUNDTRUTH pointcloud
-        sensor_msgs::PointCloud2 cloud;
-        cloud.header.frame_id = "global";
-        cloud.header.stamp = ros::Time::now();
-        cloud.width = _features_SLAM.size();
-        cloud.height = 1;
-        cloud.is_bigendian = false;
-        cloud.is_dense = false; // there may be invalid points
-        sensor_msgs::PointCloud2Modifier modifier(cloud);
-        modifier.setPointCloud2FieldsByString(1, "xyz");
-        modifier.resize(_features_SLAM.size());
-        sensor_msgs::PointCloud2Iterator<float> out_x(cloud, "x");
-        sensor_msgs::PointCloud2Iterator<float> out_y(cloud, "y");
-        sensor_msgs::PointCloud2Iterator<float> out_z(cloud, "z");
-        for (auto &featpair : _features_SLAM) {
-          // TrackSIM adds 1 to sim id if num_aruco is zero
-          Eigen::Vector3d feat = sim.get_map().at(featpair.first - 1);
-          feat = R_ESTtoGT.transpose() * (feat - t_ESTinGT);
-          *out_x = (float)feat(0);
-          ++out_x;
-          *out_y = (float)feat(1);
-          ++out_y;
-          *out_z = (float)feat(2);
-          ++out_z;
-        }
-        pub_points_sim.publish(cloud);
-#endif
 
         // Wait for user approval
         do {

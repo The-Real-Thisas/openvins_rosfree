@@ -1,0 +1,36 @@
+cmake_minimum_required(VERSION 3.16)
+project(open_vins VERSION 2.7.0 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+if (NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif ()
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -g3 -fno-signed-zeros -fno-math-errno -funroll-loops")
+add_compile_options(-Wall -Wuninitialized)
+
+option(ENABLE_ARUCO_TAGS "Enable or disable aruco tag tracking" ON)
+option(BUILD_OV_EVAL "Build the ov_eval evaluation module" ON)
+
+if (ENABLE_ARUCO_TAGS)
+    add_compile_definitions(ENABLE_ARUCO_TAGS=1)
+else ()
+    add_compile_definitions(ENABLE_ARUCO_TAGS=0)
+    message(WARNING "DISABLING ARUCOTAG TRACKING!")
+endif ()
+
+find_package(Eigen3 REQUIRED)
+find_package(OpenCV 4 REQUIRED)
+find_package(Boost REQUIRED COMPONENTS filesystem date_time)
+find_package(Ceres REQUIRED)
+message(STATUS "EIGEN: ${Eigen3_VERSION} | OPENCV: ${OpenCV_VERSION} | BOOST: ${Boost_VERSION} | CERES: ${Ceres_VERSION}")
+
+add_subdirectory(ov_core)
+add_subdirectory(ov_init)
+add_subdirectory(ov_msckf)
+add_subdirectory(ov_frontend)
+if (BUILD_OV_EVAL)
+    add_subdirectory(ov_eval)
+endif ()

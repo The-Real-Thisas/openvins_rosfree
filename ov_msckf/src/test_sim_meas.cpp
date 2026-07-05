@@ -30,9 +30,6 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/filesystem.hpp>
 
-#if ROS_AVAILABLE == 1
-#include <ros/ros.h>
-#endif
 
 #include "core/VioManagerOptions.h"
 #include "sim/Simulator.h"
@@ -51,18 +48,9 @@ int main(int argc, char **argv) {
     config_path = argv[1];
   }
 
-#if ROS_AVAILABLE == 1
-  // Launch our ros node
-  ros::init(argc, argv, "test_sim_meas");
-  auto nh = std::make_shared<ros::NodeHandle>("~");
-  nh->param<std::string>("config_path", config_path, config_path);
-#endif
 
   // Load the config
   auto parser = std::make_shared<ov_core::YamlParser>(config_path);
-#if ROS_AVAILABLE == 1
-  parser->set_node_handler(nh);
-#endif
 
   // Verbosity
   std::string verbosity = "INFO";

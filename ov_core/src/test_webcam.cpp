@@ -43,9 +43,6 @@
 #include "utils/opencv_yaml_parse.h"
 #include "utils/print.h"
 
-#if ROS_AVAILABLE == 1
-#include <ros/ros.h>
-#endif
 
 using namespace ov_core;
 
@@ -64,18 +61,9 @@ int main(int argc, char **argv) {
     config_path = argv[1];
   }
 
-#if ROS_AVAILABLE == 1
-  // Initialize this as a ROS node
-  ros::init(argc, argv, "test_webcam");
-  auto nh = std::make_shared<ros::NodeHandle>("~");
-  nh->param<std::string>("config_path", config_path, config_path);
-#endif
 
   // Load parameters
   auto parser = std::make_shared<ov_core::YamlParser>(config_path, false);
-#if ROS_AVAILABLE == 1
-  parser->set_node_handler(nh);
-#endif
 
   // Verbosity
   std::string verbosity = "INFO";
@@ -165,11 +153,7 @@ int main(int argc, char **argv) {
   double current_time = 0.0;
   std::deque<double> clonetimes;
   signal(SIGINT, signal_callback_handler);
-#if ROS_AVAILABLE == 1
-  while (ros::ok()) {
-#else
   while (true) {
-#endif
 
     // Get the next frame (and fake advance time forward)
     cv::Mat frame;

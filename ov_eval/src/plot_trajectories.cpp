@@ -120,7 +120,7 @@ int main(int argc, char **argv) {
       // Return failure if we didn't have any common timestamps
       if (poses_temp.size() < 3) {
         PRINT_ERROR(RED "[TRAJ]: unable to get enough common timestamps between trajectories.\n" RESET);
-        PRINT_ERROR(RED "[TRAJ]: does the estimated trajectory publish the rosbag timestamps??\n" RESET);
+        PRINT_ERROR(RED "[TRAJ]: does the estimated trajectory use the dataset timestamps??\n" RESET);
         std::exit(EXIT_FAILURE);
       }
 

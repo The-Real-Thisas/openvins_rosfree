@@ -1,8 +1,9 @@
-# OpenVINS Mac
+# OpenVINS ROS-Free
 
 > A personal fork of [OpenVINS](https://github.com/rpng/open_vins) that I put
-> together to get it building and running natively on **macOS / Apple Silicon**,
-> with **no ROS and no Docker**. It's a work in progress.
+> together to get it building and running with **no ROS and no Docker**,
+> developed and verified natively on **macOS / Apple Silicon**. It's a work in
+> progress.
 
 [OpenVINS](https://github.com/rpng/open_vins) is a filter-based visual-inertial
 estimator from the [Robot Perception and Navigation Group (RPNG)](https://sites.udel.edu/robot/).
@@ -18,8 +19,9 @@ out and replaces it with:
 The estimator internals (`ov_msckf`, `ov_init`, `ov_core`, `ov_eval`) are kept
 recognizable so upstream fixes stay easy to pull in.
 
-> **Status:** builds and runs on macOS (Apple Silicon, Apple Clang 17). Work in
-> progress — the build layout and the frontend may still change.
+> **Status:** builds and runs on macOS (Apple Silicon, Apple Clang 17). There is
+> no macOS-specific code, but other platforms are untested. Work in progress —
+> the build layout and the frontend may still change.
 
 ## Dependencies (Homebrew)
 
@@ -61,12 +63,12 @@ make -j
 ## Get the datasets
 
 Two ready-to-run datasets are published as MCAP recordings on the
-[releases page](https://github.com/The-Real-Thisas/openvins_mac/releases/tag/datasets-v1).
+[releases page](https://github.com/The-Real-Thisas/openvins_rosfree/releases/tag/datasets-v1).
 Download them into a `data/` folder at the repo root:
 
 ```bash
 mkdir -p data
-gh release download datasets-v1 --repo The-Real-Thisas/openvins_mac --dir data
+gh release download datasets-v1 --repo The-Real-Thisas/openvins_rosfree --dir data
 ```
 
 or, without the GitHub CLI:
@@ -74,9 +76,9 @@ or, without the GitHub CLI:
 ```bash
 mkdir -p data
 curl -L -o data/tumvi_calib_cam1_1024.mcap \
-  https://github.com/The-Real-Thisas/openvins_mac/releases/download/datasets-v1/tumvi_calib_cam1_1024.mcap
+  https://github.com/The-Real-Thisas/openvins_rosfree/releases/download/datasets-v1/tumvi_calib_cam1_1024.mcap
 curl -L -o data/uzh_fpv_indoor_forward_6.mcap \
-  https://github.com/The-Real-Thisas/openvins_mac/releases/download/datasets-v1/uzh_fpv_indoor_forward_6.mcap
+  https://github.com/The-Real-Thisas/openvins_rosfree/releases/download/datasets-v1/uzh_fpv_indoor_forward_6.mcap
 ```
 
 | file | source sequence | ground truth |

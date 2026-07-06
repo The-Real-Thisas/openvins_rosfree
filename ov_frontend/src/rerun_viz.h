@@ -7,8 +7,11 @@
 #define OV_FRONTEND_RERUN_VIZ_H
 #ifdef OV_HAVE_RERUN
 
+#include <cmath>
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include <Eigen/Eigen>
@@ -38,6 +41,12 @@ public:
     // its side).
     rec.log_static("world", rerun::ViewCoordinates::RIGHT_HAND_Z_UP);
     ok = true;
+  }
+
+  ~RerunViz() {
+    // flush map points accumulated since the last throttled re-log
+    if (ok && map_dirty)
+      log_map();
   }
 
   /// Log each camera as a Pinhole frustum, parented to the moving `world/est`
@@ -166,6 +175,32 @@ public:
                                      .with_colors(rerun::Color(76, 200, 120))
                                      .with_radii(0.006f));
 
+    // persistent map: accumulate every feature the filter has produced into
+    // one growing cloud, deduplicated on a voxel grid so re-observed (and
+    // slightly refined) landmarks don't pile up as near-duplicates.
+    auto accumulate = [this](const std::vector<Eigen::Vector3d> &feats) {
+      for (const auto &f : feats) {
+        int64_t kx = (int64_t)std::floor(f(0) / kMapVoxelSize);
+        int64_t ky = (int64_t)std::floor(f(1) / kMapVoxelSize);
+        int64_t kz = (int64_t)std::floor(f(2) / kMapVoxelSize);
+        // pack the three 21-bit voxel indices into one key (good to +-52 km)
+        uint64_t key = ((uint64_t)(kx & 0x1FFFFF) << 42) | ((uint64_t)(ky & 0x1FFFFF) << 21) | (uint64_t)(kz & 0x1FFFFF);
+        if (map_voxels.insert(key).second) {
+          map_points.emplace_back((float)f(0), (float)f(1), (float)f(2));
+          map_dirty = true;
+        }
+      }
+    };
+    accumulate(sys->get_features_SLAM());
+    accumulate(sys->get_good_features_MSCKF());
+    // re-logging the whole cloud each update would bloat the recording, so
+    // throttle; the destructor flushes whatever is pending at the end.
+    map_update_count++;
+    if (map_dirty && map_update_count % 5 == 0) {
+      log_map();
+      map_dirty = false;
+    }
+
     // tracker debug image (feature tracks drawn on the camera frames)
     cv::Mat img = sys->get_historical_viz_image();
     if (!img.empty()) {
@@ -178,9 +213,20 @@ public:
   }
 
 private:
+  void log_map() {
+    rec.log("world/feats/map", rerun::Points3D(map_points).with_colors(rerun::Color(200, 200, 210)).with_radii(0.004f));
+  }
+
   rerun::RecordingStream rec;
   bool ok = false;
   std::vector<rerun::Position3D> path_est, path_gt;
+
+  // accumulated feature map (world/feats/map), deduplicated on a voxel grid
+  static constexpr double kMapVoxelSize = 0.05; // [m]
+  std::vector<rerun::Position3D> map_points;
+  std::unordered_set<uint64_t> map_voxels;
+  size_t map_update_count = 0;
+  bool map_dirty = false;
 
   // latest estimate pose, used to pin ground truth on its first sample
   Eigen::Vector3d est_p = Eigen::Vector3d::Zero();
